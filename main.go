@@ -6,13 +6,14 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 var tokenFile = "bot.key"
-
+var members []*Member 
 func main() {
 	token := readKeyFile()
 	// Create a new Discord session using the provided bot token.
@@ -37,7 +38,6 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt, os.Kill)
 	<-sc
-
 	// Cleanly close down the Discord session.
 	dg.Close()
 }
@@ -45,11 +45,9 @@ func main() {
 func readKeyFile() string {
 	file, err := os.Open(tokenFile)
 	if err != nil {
-		file, err = os.Open("../../" + tokenFile)
-		if err != nil {
-			log.Fatal(err)
-		}
+		log.Fatal(err)
 	}
+
 	defer file.Close()
 
 	tokenSlice, err := ioutil.ReadAll(file)
@@ -65,13 +63,26 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
-	// If the message is "ping" reply with "Pong!"
-	if m.Content == "ping" {
-		s.ChannelMessageSend(m.ChannelID, "Pong!")
+
+	commands := strings.Split(m.Content, " ")
+
+	if strings.Compare(commands[0], "!vote") != 0 {
+		return
+	}
+	fmt.Println(m.Author.Username)
+	temp, err := 
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	// If the message is "pong" reply with "Ping!"
-	if m.Content == "pong" {
-		s.ChannelMessageSend(m.ChannelID, "Ping!")
+	for _, mem := range temp {
+		fmt.Println(mem.User.ID + " " + mem.User.Username + " " mem.Nick)
+	}
+
+}
+
+func getUserIDfromString(s *discordgo.Session, user string) string, error {
+	if(members == nil) {
+		members = s.GuildMembers(m.GuildID, "", 100)
 	}
 }
