@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,7 +14,8 @@ import (
 )
 
 var tokenFile = "bot.key"
-var members []*Member 
+var usernameToId map[string]string
+
 func main() {
 	token := readKeyFile()
 	// Create a new Discord session using the provided bot token.
@@ -69,20 +71,39 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if strings.Compare(commands[0], "!vote") != 0 {
 		return
 	}
-	fmt.Println(m.Author.Username)
-	temp, err := 
+
+	ID, err := getUserIDfromString(s, m.GuildID, commands[1])
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, mem := range temp {
-		fmt.Println(mem.User.ID + " " + mem.User.Username + " " mem.Nick)
-	}
-
+	s.GuildMemberNickname(m.GuildID, ID, commands[2])
 }
 
-func getUserIDfromString(s *discordgo.Session, user string) string, error {
-	if(members == nil) {
-		members = s.GuildMembers(m.GuildID, "", 100)
+func getUserIDfromString(s *discordgo.Session, guildID string, user string) (string, error) {
+	if usernameToId == nil {
+		usernameToId = make(map[string]string)
+		members, err := s.GuildMembers(guildID, "", 100)
+
+		if err != nil {
+			return "", err
+		}
+
+		for _, mem := range members {
+			usernameToId[mem.User.Username] = mem.User.ID
+
+			if len(mem.Nick) > 0 {
+				usernameToId[mem.Nick] = mem.User.ID
+			}
+		}
 	}
+
+	ID, ok := usernameToId[user]
+
+	if !ok {
+		return "", errors.New("Username not found")
+	}
+
+	return ID, nil
 }
