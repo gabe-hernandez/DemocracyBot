@@ -72,12 +72,18 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
+	if m.Author.Username != "QuantumQuip" && m.Author.Username != "picthebear" && m.Author.Username != "MetalKnux" {
+		s.ChannelMessageSend(m.ChannelID, "You have no power here!")
+		return
+	}
+
 	ID, err := getUserIDfromString(s, m.GuildID, commands[1])
 
 	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, err.Error())
 		log.Fatal(err)
 	}
-
+	s.ChannelMessageSend(m.ChannelID, "The people have spoken!")
 	s.GuildMemberNickname(m.GuildID, ID, commands[2])
 }
 
