@@ -16,10 +16,9 @@ import (
 
 var tokenFile = "bot.key"
 var usernameToId map[string]string
-var defaultVoteTime, _ = time.ParseDuration("20s")
+var defaultVoteTime, _ = time.ParseDuration("10s")
 var threshold int
 var voters []string
-var activeVote = false
 
 const invalidCommand = "I'm afraid I can't do that...(yet)"
 
@@ -135,18 +134,6 @@ func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	case "create":
 		threshold = 1
 		go createVote(s, m, commands[1:])
-	case "yes":
-		if activeVote {
-			if !strInSlice(m.Author.Username, voters) {
-				voters = append(voters, m.Author.Username)
-				threshold--
-				s.MessageReactionAdd(m.ChannelID, m.Message.ID, "👍")
-			} else {
-				s.ChannelMessageSend(m.ChannelID, "You may only vote once per vote!")
-			}
-		} else {
-			s.ChannelMessageSend(m.ChannelID, "There is no active vote! Start one with !vote create.")
-		}
 	default:
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
@@ -157,7 +144,6 @@ func createVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []str
 		s.ChannelMessageSend(m.ChannelID, "Vote create command format is !vote create username nickname")
 		return
 	}
-	activeVote = true
 	voters = nil
 	ID, err := getUserIDfromString(s, m.GuildID, commands[0])
 	if err != nil {
@@ -166,6 +152,11 @@ func createVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []str
 	}
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("A vote has started to change %v's nickname to %v!", commands[0], commands[1]))
 	time.Sleep(defaultVoteTime)
+	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👍", 100)
+	//noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👎", 100)
+	for range yesVoters {
+		threshold--
+	}
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("A vote has ended after %v!", defaultVoteTime))
 	if threshold == 0 {
 		s.ChannelMessageSend(m.ChannelID, "The people have spoken!")
@@ -173,7 +164,6 @@ func createVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []str
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "The vote has failed!")
 	}
-	activeVote = false
 }
 
 func getUserIDfromString(s *discordgo.Session, guildID string, user string) (string, error) {
