@@ -14,13 +14,13 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const threshold int = 1
+const invalidCommand = "I'm afraid I can't do that...(yet)"
+
 var tokenFile = "bot.key"
 var usernameToId map[string]string
 var defaultVoteTime, _ = time.ParseDuration("10s")
-var threshold int
 var voters []string
-
-const invalidCommand = "I'm afraid I can't do that...(yet)"
 
 func main() {
 	token := readKeyFile()
@@ -132,7 +132,6 @@ func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	}
 	switch commands[0] {
 	case "create":
-		threshold = 1
 		go createVote(s, m, commands[1:])
 	default:
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
@@ -154,11 +153,8 @@ func createVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []str
 	time.Sleep(defaultVoteTime)
 	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👍", 100)
 	//noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👎", 100)
-	for range yesVoters {
-		threshold--
-	}
 	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("A vote has ended after %v!", defaultVoteTime))
-	if threshold == 0 {
+	if threshold <= len(yesVoters) {
 		s.ChannelMessageSend(m.ChannelID, "The people have spoken!")
 		s.GuildMemberNickname(m.GuildID, ID, commands[1])
 	} else {
