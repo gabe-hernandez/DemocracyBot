@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode"
 
+
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -23,6 +24,7 @@ var defaultVoteTime, _ = time.ParseDuration("10s")
 var usernameToID map[string]string
 var voters []string
 var protectedUsers map[string]bool
+
 
 func main() {
 	token := readKeyFile()
@@ -89,6 +91,7 @@ func inACL(user string) bool {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
@@ -111,6 +114,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command str
 	default:
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
+
 }
 
 func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
@@ -131,6 +135,7 @@ func beginVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []stri
 		s.ChannelMessageSend(m.ChannelID, "Vote create command format is !vote create username nickname")
 		return
 	}
+
 	voters = nil
 	ID, err := getUserIDfromString(s, m.GuildID, commands[0])
 	if err != nil {
@@ -148,6 +153,7 @@ func beginVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []stri
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "failed...")
 	}
+
 }
 
 func getUserIDfromString(s *discordgo.Session, guildID string, user string) (string, error) {
