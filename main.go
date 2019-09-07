@@ -10,6 +10,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
+
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -21,9 +23,10 @@ const noVote = "👎"
 
 var tokenFile = "bot.key"
 var activeVotes map[string]map[string]string
-var usernameToId map[string]string
-var defaultVoteTime, _ = time.ParseDuration("20s")
 var voters []string
+var defaultVoteTime, _ = time.ParseDuration("10s")
+var usernameToID map[string]string
+var protectedUsers map[string]bool
 
 func main() {
 	token := readKeyFile()
@@ -45,6 +48,8 @@ func main() {
 		fmt.Println("error opening connection,", err)
 		return
 	}
+
+	protectedUsers = map[string]bool{"MetalKnuckles": true}
 
 	// Wait here until CTRL-C or other term signal is received.
 	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
@@ -119,8 +124,7 @@ func reactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	//g, _ := s.Guild(m.GuildID)
-	//getEmojiId("thumbsup", g)
+
 	// Ignore all messages created by the bot itself
 	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
@@ -136,10 +140,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command string) {
 	commands := strings.Split(command, " ")
-	if !inACL(m.Author.Username) {
-		s.ChannelMessageSend(m.ChannelID, "You have no power here!")
-		return
-	}
+
 	switch commands[0] {
 	case "vote":
 		vote(s, m, commands[1:])
@@ -148,6 +149,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command str
 	default:
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
+
 }
 
 func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
@@ -195,6 +197,8 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
 		return
 	}
+
+	voters = nil
 	ID, err := getUserIDfromString(s, m.GuildID, commands[0])
 	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
@@ -236,8 +240,16 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 }
 
 func getUserIDfromString(s *discordgo.Session, guildID string, user string) (string, error) {
-	if usernameToId == nil {
-		usernameToId = make(map[string]string)
+	//When a user is @Named, it gives user string in <@!xxx> format
+	if user[0] == '<' {
+		return strings.TrimFunc(user, func(r rune) bool {
+			return !unicode.IsNumber(r)
+		}), nil
+	}
+
+	user = strings.ToLower(user)
+	if usernameToID == nil {
+		usernameToID = make(map[string]string)
 		members, err := s.GuildMembers(guildID, "", 100)
 
 		if err != nil {
@@ -245,15 +257,15 @@ func getUserIDfromString(s *discordgo.Session, guildID string, user string) (str
 		}
 
 		for _, mem := range members {
-			usernameToId[mem.User.Username] = mem.User.ID
+			usernameToID[strings.ToLower(mem.User.Username)] = mem.User.ID
 
 			if len(mem.Nick) > 0 {
-				usernameToId[mem.Nick] = mem.User.ID
+				usernameToID[strings.ToLower(mem.Nick)] = mem.User.ID
 			}
 		}
 	}
 
-	ID, ok := usernameToId[user]
+	ID, ok := usernameToID[user]
 
 	if !ok {
 		return "", errors.New("Username not found")
