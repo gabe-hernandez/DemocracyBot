@@ -27,7 +27,11 @@ var usernameToID map[string]string
 var protectedUsers map[string]bool
 
 func main() {
-	token := readKeyFile()
+	token, exists := os.LookupEnv("DemocracyBotKey")
+	if !exists {
+		fmt.Println("Discord key missing. Please set the DemcoracyBotKey environment variable.")
+		os.Exit(1)
+	}
 	// Create a new Discord session using the provided bot token.
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
@@ -111,7 +115,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command str
 
 	switch commands[0] {
 	case "vote":
-		vote(s, m, commands[1:])
+		Vote(s, m, commands[1:])
 	case "help":
 		s.ChannelMessageSend(m.ChannelID, "<:Reverse:497131062653353996>")
 	default:
@@ -120,7 +124,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command str
 
 }
 
-func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+func Vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	if len(commands) < 1 {
 		s.ChannelMessageSend(m.ChannelID, "Vote command format is !vote action")
 		return
