@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -19,9 +17,8 @@ const invalidCommand = "I'm afraid I can't do that...(yet)"
 const yesVote = "👍"
 const noVote = "👎"
 
-var tokenFile = "bot.key"
 var activeVotes map[string]map[string]string
-var usernameToId map[string]string
+var usernameToID map[string]string
 var defaultVoteTime, _ = time.ParseDuration("20s")
 var voters []string
 
@@ -59,18 +56,6 @@ func main() {
 	dg.Close()
 }
 
-func readKeyFile() string {
-	file, err := os.Open(tokenFile)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer file.Close()
-
-	tokenSlice, err := ioutil.ReadAll(file)
-	return string(tokenSlice)
-}
-
 func strInSlice(str string, slice []string) bool {
 	for _, v := range slice {
 		if strings.Compare(v, str) == 0 {
@@ -80,19 +65,7 @@ func strInSlice(str string, slice []string) bool {
 	return false
 }
 
-func inACL(user string) bool {
-	switch user {
-	case
-		"QuantumQuip",
-		"picthebear",
-		"MetalKnuckles",
-		"Baeson":
-		return true
-	}
-	return false
-}
-
-func getEmojiId(name string, guild *discordgo.Guild) string {
+func getEmojiID(name string, guild *discordgo.Guild) string {
 	for _, v := range guild.Emojis {
 		if strings.Compare(v.Name, name) == 0 {
 			return v.ID
@@ -103,21 +76,16 @@ func getEmojiId(name string, guild *discordgo.Guild) string {
 
 func reactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 	if _, ok := activeVotes[r.MessageID]; ok {
-		if strings.Compare(r.Emoji.Name, yesVote) == 0 || strings.Compare(r.Emoji.Name, noVote) == 0 {
+		if r.Emoji.Name == yesVote || r.Emoji.Name == noVote {
 			if vote, ok := activeVotes[r.MessageID][r.UserID]; ok {
-				s.ChannelMessageSend(r.ChannelID, "Debug: User already voted!")
 				s.MessageReactionRemove(r.ChannelID, r.MessageID, vote, r.UserID)
 				activeVotes[r.MessageID][r.UserID] = r.Emoji.Name
 			} else {
 				activeVotes[r.MessageID] = make(map[string]string)
 				activeVotes[r.MessageID][r.UserID] = r.Emoji.Name
-				s.ChannelMessageSend(r.ChannelID, "Debug: First vote!")
 			}
 		}
-	} else {
-		s.ChannelMessageSend(r.ChannelID, "Debug: There is no active vote of this message!")
 	}
-	return
 }
 
 // This function will be called (due to AddHandler above) every time a new
@@ -140,21 +108,15 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command string) {
 	commands := strings.Split(command, " ")
-	if !inACL(m.Author.Username) {
-		s.ChannelMessageSend(m.ChannelID, "You have no power here!")
-		return
-	}
 	switch commands[0] {
 	case "vote":
-		Vote(s, m, commands[1:])
+		vote(s, m, commands[1:])
 	case "help":
 		s.ChannelMessageSend(m.ChannelID, "<:Reverse:497131062653353996>")
-	default:
-		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
 }
 
-func Vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	if len(commands) < 1 {
 		s.ChannelMessageSend(m.ChannelID, "Vote command format is !vote action")
 		return
@@ -189,7 +151,6 @@ func endVote(s *discordgo.Session, m *discordgo.MessageCreate) bool {
 	} else {
 		s.ChannelMessageSend(m.ChannelID, "The vote has failed!")
 	}
-	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("A vote has ended after %v!", defaultVoteTime))
 	activeVotes[m.ID] = make(map[string]string)
 	return result
 }
@@ -222,12 +183,18 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	endVote(s, m)
 }
 
+func getUserIDFromCommand(userString string) string{
+	return userString[3:len(userString)-1]
+}
+
 func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	if len(commands) < 2 {
 		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
 		return
 	}
-	ID, err := getUserIDfromString(s, m.GuildID, commands[0])
+	
+	ID := getUserIDFromCommand(commands[0])
+	_, err := s.GuildMember(m.GuildID, ID)
 	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
 		return
@@ -235,13 +202,13 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on the above message.", commands[0], commands[1]))
 	time.Sleep(defaultVoteTime)
 	if endVote(s, m) {
-		s.GuildMemberNickname(m.GuildID, ID, commands[1])
+		s.GuildMemberNickname(m.GuildID, ID, strings.Join(commands[1:], " "))
 	}
 }
 
 func getUserIDfromString(s *discordgo.Session, guildID string, user string) (string, error) {
-	if usernameToId == nil {
-		usernameToId = make(map[string]string)
+	if usernameToID == nil {
+		usernameToID = make(map[string]string)
 		members, err := s.GuildMembers(guildID, "", 100)
 
 		if err != nil {
@@ -249,15 +216,15 @@ func getUserIDfromString(s *discordgo.Session, guildID string, user string) (str
 		}
 
 		for _, mem := range members {
-			usernameToId[mem.User.Username] = mem.User.ID
+			usernameToID[mem.User.Username] = mem.User.ID
 
 			if len(mem.Nick) > 0 {
-				usernameToId[mem.Nick] = mem.User.ID
+				usernameToID[mem.Nick] = mem.User.ID
 			}
 		}
 	}
 
-	ID, ok := usernameToId[user]
+	ID, ok := usernameToID[user]
 
 	if !ok {
 		return "", errors.New("Username not found")
