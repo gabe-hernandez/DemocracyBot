@@ -12,7 +12,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-const threshold = 1
+const threshold = 2
 const invalidCommand = "I'm afraid I can't do that...(yet)"
 const yesVote = "👍"
 const noVote = "👎"
