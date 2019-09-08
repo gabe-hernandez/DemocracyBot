@@ -12,12 +12,10 @@ import (
 	"time"
 	"unicode"
 
-
 	"github.com/bwmarrin/discordgo"
 )
 
-const threshold = 1
-const invalidCommand = "I'm afraid I can't do that...(yet)"
+const threshold = 5
 const yesVote = "👍"
 const noVote = "👎"
 
@@ -70,36 +68,6 @@ func readKeyFile() string {
 
 	tokenSlice, err := ioutil.ReadAll(file)
 	return string(tokenSlice)
-}
-
-func strInSlice(str string, slice []string) bool {
-	for _, v := range slice {
-		if strings.Compare(v, str) == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func inACL(user string) bool {
-	switch user {
-	case
-		"QuantumQuip",
-		"picthebear",
-		"MetalKnuckles",
-		"Baeson":
-		return true
-	}
-	return false
-}
-
-func getEmojiId(name string, guild *discordgo.Guild) string {
-	for _, v := range guild.Emojis {
-		if strings.Compare(v.Name, name) == 0 {
-			return v.ID
-		}
-	}
-	return ""
 }
 
 func reactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
