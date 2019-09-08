@@ -184,7 +184,10 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 }
 
 func getUserIDFromCommand(userString string) string{
-	return userString[3:len(userString)-1]
+	if len(userString) > 3 {
+		return userString[2:len(userString)-1]
+	}
+	return ""
 }
 
 func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
@@ -193,16 +196,16 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		return
 	}
 	
-	ID := getUserIDFromCommand(commands[0])
-	_, err := s.GuildMember(m.GuildID, ID)
-	if err != nil {
+	userID := getUserIDFromCommand(commands[0])
+	_, err := s.GuildMember(m.GuildID, userID)
+	if  err != nil {
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
 		return
 	}
 	startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on the above message.", commands[0], commands[1]))
 	time.Sleep(defaultVoteTime)
 	if endVote(s, m) {
-		s.GuildMemberNickname(m.GuildID, ID, strings.Join(commands[1:], " "))
+		s.GuildMemberNickname(m.GuildID, userID, strings.Join(commands[1:], " "))
 	}
 }
 
