@@ -197,12 +197,13 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	}
 	
 	userID := getUserIDFromCommand(commands[0])
-	_, err := s.GuildMember(m.GuildID, userID)
+	member, err := s.GuildMember(m.GuildID, userID)
 	if  err != nil {
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
 		return
 	}
-	startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on the above message.", commands[0], commands[1]))
+	
+	startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on the above message.", member.Nick, commands[1]))
 	time.Sleep(defaultVoteTime)
 	if endVote(s, m) {
 		s.GuildMemberNickname(m.GuildID, userID, strings.Join(commands[1:], " "))
