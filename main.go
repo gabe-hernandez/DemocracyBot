@@ -209,30 +209,3 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.GuildMemberNickname(m.GuildID, userID, strings.Join(commands[1:], " "))
 	}
 }
-
-func getUserIDfromString(s *discordgo.Session, guildID string, user string) (string, error) {
-	if usernameToID == nil {
-		usernameToID = make(map[string]string)
-		members, err := s.GuildMembers(guildID, "", 100)
-
-		if err != nil {
-			return "", err
-		}
-
-		for _, mem := range members {
-			usernameToID[mem.User.Username] = mem.User.ID
-
-			if len(mem.Nick) > 0 {
-				usernameToID[mem.Nick] = mem.User.ID
-			}
-		}
-	}
-
-	ID, ok := usernameToID[user]
-
-	if !ok {
-		return "", errors.New("Username not found")
-	}
-
-	return ID, nil
-}
