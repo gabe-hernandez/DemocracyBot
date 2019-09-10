@@ -175,14 +175,24 @@ func endVote(s *discordgo.Session, m *discordgo.Message) bool {
 	activeVotes[m.ID] = make(map[string]string)
 	return result
 }
-func getRoleByName(s *discordgo.Session, guildID string, name string) (string, error) {
-	roles, err := s.GuildRoles(guildID)
-	for _, role := range roles {
-		if role.Name == name {
-			return role.ID, nil
-		}
+
+func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	if len(commands) < 2 {
+		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
+		return
 	}
-	return "", err
+	
+	user, err := getUserFromString(s, m.GuildID, commands[0])
+	if  err != nil {
+		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
+		return
+	}
+	
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on this message.", user.Username, commands[1]))
+	time.Sleep(defaultVoteTime)
+	if endVote(s, botM) {
+		s.GuildMemberNickname(m.GuildID, user.ID, strings.Join(commands[1:], " "))
+	}
 }
 
 func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
@@ -233,6 +243,16 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	endVote(s, botM)
 }
 
+func getRoleByName(s *discordgo.Session, guildID string, name string) (string, error) {
+	roles, err := s.GuildRoles(guildID)
+	for _, role := range roles {
+		if role.Name == name {
+			return role.ID, nil
+		}
+	}
+	return "", err
+}
+
 func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*discordgo.User, error) {
 	//When a user is @Named, it gives user string in <@!xxx> format
 	if match, _  := regexp.MatchString(`<@\d+>`, userStr); match {
@@ -268,23 +288,4 @@ func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*d
 	}
 
 	return user, nil
-}
-
-func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
-	if len(commands) < 2 {
-		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
-		return
-	}
-	
-	user, err := getUserFromString(s, m.GuildID, commands[0])
-	if  err != nil {
-		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
-		return
-	}
-	
-	botM := startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on this message.", user.Username, commands[1]))
-	time.Sleep(defaultVoteTime)
-	if endVote(s, botM) {
-		s.GuildMemberNickname(m.GuildID, user.ID, strings.Join(commands[1:], " "))
-	}
 }
