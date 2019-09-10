@@ -150,17 +150,21 @@ func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	}
 }
 
-func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string) {
+func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string) *discordgo.Message {
 	activeVotes[m.ID] = make(map[string]string)
-	s.ChannelMessageSend(m.ChannelID, message)
+	botMessage, _ := s.ChannelMessageSend(m.ChannelID, message)
+	s.MessageReactionAdd(botMessage.ChannelID, botMessage.ID, yesVote)
+	s.MessageReactionAdd(botMessage.ChannelID, botMessage.ID, noVote)
+	return botMessage
 }
 
-func endVote(s *discordgo.Session, m *discordgo.MessageCreate) bool {
+func endVote(s *discordgo.Session, m *discordgo.Message) bool {
 	result := false
-	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👍", 100)
-	noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👎", 100)
-	yesVotes := len(yesVoters)
-	noVotes := len(noVoters)
+	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, yesVote, 100)
+	noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, noVote, 100)
+	//Don't count the reactions the bot adds
+	yesVotes := len(yesVoters) - 1
+	noVotes := len(noVoters) - 1
 	totalVotes := yesVotes + noVotes
 	if yesVotes > noVotes && totalVotes >= threshold {
 		s.ChannelMessageSend(m.ChannelID, "The people have spoken!")
@@ -207,9 +211,9 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	if err != nil {
 		s.ChannelMessage(m.ChannelID, unknownError)
 	}
-	startVote(s, m, fmt.Sprintf("A vote has started to %v %v %v the role %v!", action, user.Username, actionProp, roleName))
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v %v %v the role %v! Please react with 👍 or 👎 on this message.", action, user.Username, actionProp, roleName))
 	time.Sleep(defaultVoteTime)
-	if endVote(s, m) {
+	if endVote(s, botM) {
 		if action == "add" {
 			s.GuildMemberRoleAdd(m.GuildID, user.ID, roleID)
 		} else if action == "remove" {
@@ -224,9 +228,9 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "Poll command format is !vote poll description")
 		return
 	}
-	startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on the above message.", strings.Join(commands[:], " ")))
+	botM := startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on this message.", strings.Join(commands[:], " ")))
 	time.Sleep(defaultVoteTime)
-	endVote(s, m)
+	endVote(s, botM)
 }
 
 func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*discordgo.User, error) {
@@ -278,9 +282,9 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		return
 	}
 	
-	startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on the above message.", user.Username, commands[1]))
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on this message.", user.Username, commands[1]))
 	time.Sleep(defaultVoteTime)
-	if endVote(s, m) {
+	if endVote(s, botM) {
 		s.GuildMemberNickname(m.GuildID, user.ID, strings.Join(commands[1:], " "))
 	}
 }
