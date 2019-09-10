@@ -7,6 +7,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"regexp"
+	"errors"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -18,7 +20,7 @@ const noVote = "👎"
 const unknownError = "Unknown Error!"
 
 var activeVotes map[string]map[string]string
-var usernameToID map[string]string
+var usernameToID map[string]*discordgo.User
 var defaultVoteTime time.Duration
 var defaultVoteTimeStr = "30m"
 var threshold = 5
@@ -148,17 +150,21 @@ func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	}
 }
 
-func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string) {
+func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string) *discordgo.Message {
 	activeVotes[m.ID] = make(map[string]string)
-	s.ChannelMessageSend(m.ChannelID, message)
+	botMessage, _ := s.ChannelMessageSend(m.ChannelID, message)
+	s.MessageReactionAdd(botMessage.ChannelID, botMessage.ID, yesVote)
+	s.MessageReactionAdd(botMessage.ChannelID, botMessage.ID, noVote)
+	return botMessage
 }
 
-func endVote(s *discordgo.Session, m *discordgo.MessageCreate) bool {
+func endVote(s *discordgo.Session, m *discordgo.Message) bool {
 	result := false
-	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👍", 100)
-	noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, "👎", 100)
-	yesVotes := len(yesVoters)
-	noVotes := len(noVoters)
+	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, yesVote, 100)
+	noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, noVote, 100)
+	//Don't count the reactions the bot adds
+	yesVotes := len(yesVoters) - 1
+	noVotes := len(noVoters) - 1
 	totalVotes := yesVotes + noVotes
 	if yesVotes > noVotes && totalVotes >= threshold {
 		s.ChannelMessageSend(m.ChannelID, "The people have spoken!")
@@ -169,14 +175,24 @@ func endVote(s *discordgo.Session, m *discordgo.MessageCreate) bool {
 	activeVotes[m.ID] = make(map[string]string)
 	return result
 }
-func getRoleByName(s *discordgo.Session, guildID string, name string) (string, error) {
-	roles, err := s.GuildRoles(guildID)
-	for _, role := range roles {
-		if role.Name == name {
-			return role.ID, nil
-		}
+
+func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	if len(commands) < 2 {
+		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
+		return
 	}
-	return "", err
+	
+	user, err := getUserFromString(s, m.GuildID, commands[0])
+	if  err != nil {
+		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
+		return
+	}
+	
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on this message.", user.Username, commands[1]))
+	time.Sleep(defaultVoteTime)
+	if endVote(s, botM) {
+		s.GuildMemberNickname(m.GuildID, user.ID, strings.Join(commands[1:], " "))
+	}
 }
 
 func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
@@ -195,8 +211,7 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	} else if action == "remove" {
 		actionProp = "from"
 	}
-	userID := getUserIDFromCommand(commands[1])
-	member, err := s.GuildMember(m.GuildID, userID)
+	user, err := getUserFromString(s, m.GuildID, commands[1])
 	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
 		return
@@ -206,13 +221,13 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	if err != nil {
 		s.ChannelMessage(m.ChannelID, unknownError)
 	}
-	startVote(s, m, fmt.Sprintf("A vote has started to %v %v %v the role %v!", action, member.User.Username, actionProp, roleName))
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v %v %v the role %v! Please react with 👍 or 👎 on this message.", action, user.Username, actionProp, roleName))
 	time.Sleep(defaultVoteTime)
-	if endVote(s, m) {
+	if endVote(s, botM) {
 		if action == "add" {
-			s.GuildMemberRoleAdd(m.GuildID, userID, roleID)
+			s.GuildMemberRoleAdd(m.GuildID, user.ID, roleID)
 		} else if action == "remove" {
-			s.GuildMemberRoleRemove(m.GuildID, userID, roleID)
+			s.GuildMemberRoleRemove(m.GuildID, user.ID, roleID)
 		}
 	}
 
@@ -223,34 +238,54 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "Poll command format is !vote poll description")
 		return
 	}
-	startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on the above message.", strings.Join(commands[:], " ")))
+	botM := startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on this message.", strings.Join(commands[:], " ")))
 	time.Sleep(defaultVoteTime)
-	endVote(s, m)
+	endVote(s, botM)
 }
 
-func getUserIDFromCommand(userString string) string{
-	if len(userString) > 3 {
-		return userString[2:len(userString)-1]
+func getRoleByName(s *discordgo.Session, guildID string, name string) (string, error) {
+	roles, err := s.GuildRoles(guildID)
+	for _, role := range roles {
+		if role.Name == name {
+			return role.ID, nil
+		}
 	}
-	return ""
+	return "", err
 }
 
-func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
-	if len(commands) < 2 {
-		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
-		return
+func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*discordgo.User, error) {
+	//When a user is @Named, it gives user string in <@!xxx> format
+	if match, _  := regexp.MatchString(`<@\d+>`, userStr); match {
+		mem, err := s.GuildMember(guildID, userStr[2:len(userStr)-1])
+		if err != nil {
+			return nil, err
+		}
+		return mem.User, nil
 	}
-	
-	userID := getUserIDFromCommand(commands[0])
-	member, err := s.GuildMember(m.GuildID, userID)
-	if  err != nil {
-		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
-		return
+
+	userStr = strings.ToLower(userStr)
+	if usernameToID == nil {
+		usernameToID = make(map[string]*discordgo.User)
+		members, err := s.GuildMembers(guildID, "", 100)
+
+		if err != nil {
+			return nil, err
+		}
+
+		for _, mem := range members {
+			usernameToID[strings.ToLower(mem.User.Username)] = mem.User
+
+			if len(mem.Nick) > 0 {
+				usernameToID[strings.ToLower(mem.Nick)] = mem.User
+			}
+		}
 	}
-	
-	startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on the above message.", member.Nick, commands[1]))
-	time.Sleep(defaultVoteTime)
-	if endVote(s, m) {
-		s.GuildMemberNickname(m.GuildID, userID, strings.Join(commands[1:], " "))
+
+	user, ok := usernameToID[userStr]
+
+	if !ok {
+		return nil, errors.New("Username not found")
 	}
+
+	return user, nil
 }
