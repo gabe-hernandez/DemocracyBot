@@ -23,7 +23,7 @@ var activeVotes map[string]map[string]string
 var usernameToID map[string]*discordgo.User
 var defaultVoteTime time.Duration
 var defaultVoteTimeStr = "30m"
-var threshold = 5
+var threshold = 7
 var voters []string
 var debug bool
 
@@ -158,19 +158,19 @@ func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string)
 	return botMessage
 }
 
-func endVote(s *discordgo.Session, m *discordgo.Message) bool {
+func endVote(s *discordgo.Session, m *discordgo.Message, voteDesc string) bool {
 	result := false
 	yesVoters, _ := s.MessageReactions(m.ChannelID, m.ID, yesVote, 100)
 	noVoters, _ := s.MessageReactions(m.ChannelID, m.ID, noVote, 100)
 	//Don't count the reactions the bot adds
-	yesVotes := len(yesVoters) - 1
-	noVotes := len(noVoters) - 1
+	yesVotes := len(yesVoters)
+	noVotes := len(noVoters)
 	totalVotes := yesVotes + noVotes
 	if yesVotes > noVotes && totalVotes >= threshold {
-		s.ChannelMessageSend(m.ChannelID, "The people have spoken!")
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The vote to %v has succeeded. The people have spoken!", voteDesc))
 		result = true
 	} else {
-		s.ChannelMessageSend(m.ChannelID, "The vote has failed!")
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The vote to %v has failed!", voteDesc))
 	}
 	activeVotes[m.ID] = make(map[string]string)
 	return result
@@ -187,11 +187,12 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
 		return
 	}
-	
-	botM := startVote(s, m, fmt.Sprintf("A vote has started to change %v's nickname to %v! Please react with 👍 or 👎 on this message.", user.Username, commands[1]))
+	newName :=  strings.Join(commands[1:], " ")
+	voteDesc := fmt.Sprintf("change %v's nickname to %v", user.Username, newName)
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v! Please react with 👍 or 👎 on this message.", voteDesc))
 	time.Sleep(defaultVoteTime)
-	if endVote(s, botM) {
-		s.GuildMemberNickname(m.GuildID, user.ID, strings.Join(commands[1:], " "))
+	if endVote(s, botM, voteDesc) {
+		s.GuildMemberNickname(m.GuildID, user.ID, newName)
 	}
 }
 
@@ -221,9 +222,10 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	if err != nil {
 		s.ChannelMessage(m.ChannelID, unknownError)
 	}
-	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v %v %v the role %v! Please react with 👍 or 👎 on this message.", action, user.Username, actionProp, roleName))
+	voteDesc := fmt.Sprintf("%v %v %v the role %v", action, user.Username, actionProp, roleName)
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v! Please react with 👍 or 👎 on this message.", voteDesc))
 	time.Sleep(defaultVoteTime)
-	if endVote(s, botM) {
+	if endVote(s, botM, voteDesc) {
 		if action == "add" {
 			s.GuildMemberRoleAdd(m.GuildID, user.ID, roleID)
 		} else if action == "remove" {
@@ -238,9 +240,10 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "Poll command format is !vote poll description")
 		return
 	}
-	botM := startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on this message.", strings.Join(commands[:], " ")))
+	voteDesc := strings.Join(commands[:], " ")
+	botM := startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on this message.", voteDesc))
 	time.Sleep(defaultVoteTime)
-	endVote(s, botM)
+	endVote(s, botM, fmt.Sprintf(" decide on %v", voteDesc))
 }
 
 func getRoleByName(s *discordgo.Session, guildID string, name string) (string, error) {
@@ -256,8 +259,11 @@ func getRoleByName(s *discordgo.Session, guildID string, name string) (string, e
 func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*discordgo.User, error) {
 	//When a user is @Named, it gives user string in <@!xxx> format
 	if match, _  := regexp.MatchString(`<@\d+>`, userStr); match {
-		mem, err := s.GuildMember(guildID, userStr[2:len(userStr)-1])
+		userID := userStr[2:len(userStr)-1]
+		mem, err := s.GuildMember(guildID, userID)
 		if err != nil {
+			fmt.Printf("Lookup failed for extracted UID %v and raw user %v\n",  userID, userStr)
+			fmt.Println(err)
 			return nil, err
 		}
 		return mem.User, nil
