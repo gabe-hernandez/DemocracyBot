@@ -238,11 +238,10 @@ func getRoleByName(s *discordgo.Session, guildID string, name string) (string, e
 
 func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*discordgo.User, error) {
 	//When a user is @Named, it gives user string in <@!xxx> format
-	if match, _  := regexp.MatchString(`<@\d+>`, userStr); match {
-		userID := userStr[2:len(userStr)-1]
-		mem, err := s.GuildMember(guildID, userID)
+	if match := regexp.MustCompile(`<@!??(\d+)>`).FindStringSubmatch(userStr); match != nil {
+		mem, err := s.GuildMember(guildID, match[1])
 		if err != nil {
-			fmt.Printf("Lookup failed for extracted UID %v and raw user %v\n",  userID, userStr)
+			fmt.Printf("Lookup failed for extracted UID %v and raw user %v\n",  mem.User.ID, userStr)
 			fmt.Println(err)
 			return nil, err
 		}
@@ -255,6 +254,8 @@ func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*d
 		members, err := s.GuildMembers(guildID, "", 100)
 
 		if err != nil {
+			fmt.Printf("Lookup failed for raw user %v\n",  userStr)
+			fmt.Println(err)
 			return nil, err
 		}
 
@@ -270,6 +271,7 @@ func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*d
 	user, ok := usernameToID[userStr]
 
 	if !ok {
+		fmt.Printf("Lookup failed for raw user %v\n", userStr)
 		return nil, errors.New("Username not found")
 	}
 
