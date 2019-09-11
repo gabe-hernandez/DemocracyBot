@@ -23,7 +23,7 @@ var activeVotes map[string]map[string]string
 var usernameToID map[string]*discordgo.User
 var defaultVoteTime time.Duration
 var defaultVoteTimeStr = "30m"
-var threshold = 7
+var threshold = 5
 var voters []string
 var debug bool
 
@@ -67,24 +67,6 @@ func main() {
 	dg.Close()
 }
 
-func strInSlice(str string, slice []string) bool {
-	for _, v := range slice {
-		if strings.Compare(v, str) == 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func getEmojiID(name string, guild *discordgo.Guild) string {
-	for _, v := range guild.Emojis {
-		if strings.Compare(v.Name, name) == 0 {
-			return v.ID
-		}
-	}
-	return ""
-}
-
 func reactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 	if _, ok := activeVotes[r.MessageID]; ok {
 		if r.Emoji.Name == yesVote || r.Emoji.Name == noVote {
@@ -102,10 +84,6 @@ func reactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 // This function will be called (due to AddHandler above) every time a new
 // message is created on any channel that the autenticated bot has access to.
 func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
-	//g, _ := s.Guild(m.GuildID)
-	//getEmojiId("thumbsup", g)
-	// Ignore all messages created by the bot itself
-	// This isn't required in this specific example but it's a good practice.
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
@@ -165,14 +143,16 @@ func endVote(s *discordgo.Session, m *discordgo.Message, voteDesc string) bool {
 	//Don't count the reactions the bot adds
 	yesVotes := len(yesVoters)
 	noVotes := len(noVoters)
-	totalVotes := yesVotes + noVotes
-	if yesVotes > noVotes && totalVotes >= threshold {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The vote to %v has succeeded. The people have spoken!", voteDesc))
+	totalVotes := yesVotes - noVotes
+	var resultString string
+	if totalVotes >= threshold {
+		resultString = "The vote to %v has succeeded. The people have spoken!"
 		result = true
 	} else {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("The vote to %v has failed!", voteDesc))
+		resultString = "The vote to %v has failed!"
 	}
-	activeVotes[m.ID] = make(map[string]string)
+	s.ChannelMessageSend(m.ChannelID, fmt.Sprintf(resultString, voteDesc))
+	activeVotes[m.ID] = nil
 	return result
 }
 
