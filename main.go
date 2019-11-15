@@ -116,7 +116,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		}
 	}
 
-	if m.Content[0] == '!' {
+	if len(m.Content) > 0 && m.Content[0] == '!' {
 		handleCommand(s, m, m.Content[1:])
 	} else {
 		return
