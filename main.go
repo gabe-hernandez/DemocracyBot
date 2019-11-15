@@ -197,6 +197,36 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 }
 
 func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	switch commands[0] {
+	case "name":
+		roleNameVote(s, m, commands[1:])
+	case "change":
+		roleChangeVote(s, m, commands[1:])
+	default:
+		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")	
+	}
+}
+
+func roleNameVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	roleNames := strings.Join(commands[0:], " ")
+	re := regexp.MustCompile(`"[a-zA-Z0-9\s]+"`)
+	roles := re.FindAllString(roleNames, 2)
+	oldName := strings.Trim(roles[0], "\"")
+	newName := strings.Trim(roles[1], "\"")
+
+	role, err := getRoleByName(s, m.GuildID, oldName)
+	if err != nil {
+		s.ChannelMessage(m.ChannelID, unknownError)
+	}
+	voteDesc := fmt.Sprintf("change the %v role to %v", oldName, newName)
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v! Please react with 👍 or 👎 on this message.", voteDesc))
+	time.Sleep(defaultVoteTime)
+	if endVote(s, botM, voteDesc) {
+		s.GuildRoleEdit(m.GuildID, role.ID, newName, role.Color, role.Hoist, role.Permissions, role.Mentionable)
+	}
+}
+
+func roleChangeVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	// Currently disabled functionality
 	if !debug {
 		return
@@ -218,7 +248,7 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		return
 	}
 	roleName := strings.Join(commands[2:], " ")
-	roleID, err := getRoleByName(s, m.GuildID, roleName)
+	role, err := getRoleByName(s, m.GuildID, roleName)
 	if err != nil {
 		s.ChannelMessage(m.ChannelID, unknownError)
 	}
@@ -227,9 +257,9 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	time.Sleep(defaultVoteTime)
 	if endVote(s, botM, voteDesc) {
 		if action == "add" {
-			s.GuildMemberRoleAdd(m.GuildID, user.ID, roleID)
+			s.GuildMemberRoleAdd(m.GuildID, user.ID, role.ID)
 		} else if action == "remove" {
-			s.GuildMemberRoleRemove(m.GuildID, user.ID, roleID)
+			s.GuildMemberRoleRemove(m.GuildID, user.ID, role.ID)
 		}
 	}
 
@@ -246,14 +276,14 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	endVote(s, botM, fmt.Sprintf(" decide on %v", voteDesc))
 }
 
-func getRoleByName(s *discordgo.Session, guildID string, name string) (string, error) {
+func getRoleByName(s *discordgo.Session, guildID string, name string) (*discordgo.Role, error) {
 	roles, err := s.GuildRoles(guildID)
 	for _, role := range roles {
 		if role.Name == name {
-			return role.ID, nil
+			return role, nil
 		}
 	}
-	return "", err
+	return nil, err
 }
 
 func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*discordgo.User, error) {
