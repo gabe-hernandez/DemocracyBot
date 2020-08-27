@@ -1,18 +1,17 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
-	"regexp"
-	"errors"
 
 	"github.com/bwmarrin/discordgo"
 )
-
 
 const invalidCommand = "I'm afraid I can't do that...(yet)"
 const yesVote = "👍"
@@ -128,6 +127,8 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command str
 	switch commands[0] {
 	case "vote":
 		vote(s, m, commands[1:])
+	case "slap":
+		slap(s, m, commands[1:])
 	case "help":
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Votes last %v long.\nThe required number of votes is %v.", defaultVoteTime, threshold))
 	}
@@ -148,6 +149,26 @@ func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 	default:
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
+}
+
+func slap(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	if len(commands) < 1 {
+		s.ChannelMessageSend(m.ChannelID, "Slap command format is !slap username")
+		return
+	}
+
+	user, err := getUserFromString(s, m.GuildID, commands[0])
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, "Swing and a miss.")
+		return
+	}
+	if m.Author.Username == user.Username {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v slaps themself in confusion.", m.Author.Username))
+
+	} else {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v slaps %v around a bit with a large trout.", m.Author.Username, user.Username))
+	}
+
 }
 
 func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string) *discordgo.Message {
@@ -181,13 +202,13 @@ func nickVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "Vote role command format is !vote role create name")
 		return
 	}
-	
+
 	user, err := getUserFromString(s, m.GuildID, commands[0])
-	if  err != nil {
+	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
 		return
 	}
-	newName :=  strings.Join(commands[1:], " ")
+	newName := strings.Join(commands[1:], " ")
 	voteDesc := fmt.Sprintf("change %v's nickname to %v", user.Username, newName)
 	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v! Please react with 👍 or 👎 on this message.", voteDesc))
 	time.Sleep(defaultVoteTime)
@@ -203,7 +224,7 @@ func roleVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 	case "change":
 		roleChangeVote(s, m, commands[1:])
 	default:
-		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")	
+		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
 }
 
@@ -291,7 +312,7 @@ func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*d
 	if match := regexp.MustCompile(`<@!??(\d+)>`).FindStringSubmatch(userStr); match != nil {
 		mem, err := s.GuildMember(guildID, match[1])
 		if err != nil {
-			fmt.Printf("Lookup failed for extracted UID %v and raw user %v\n",  mem.User.ID, userStr)
+			fmt.Printf("Lookup failed for extracted UID %v and raw user %v\n", mem.User.ID, userStr)
 			fmt.Println(err)
 			return nil, err
 		}
@@ -304,7 +325,7 @@ func getUserFromString(s *discordgo.Session, guildID string, userStr string) (*d
 		members, err := s.GuildMembers(guildID, "", 100)
 
 		if err != nil {
-			fmt.Printf("Lookup failed for raw user %v\n",  userStr)
+			fmt.Printf("Lookup failed for raw user %v\n", userStr)
 			fmt.Println(err)
 			return nil, err
 		}
