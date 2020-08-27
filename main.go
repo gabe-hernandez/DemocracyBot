@@ -156,19 +156,20 @@ func slap(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 		s.ChannelMessageSend(m.ChannelID, "Slap command format is !slap username")
 		return
 	}
-
+	author := m.Author.Username
+	channel := m.ChannelID
 	user, err := getUserFromString(s, m.GuildID, commands[0])
+	s.ChannelMessageDelete(m.ChannelID, m.ID)
 	if err != nil {
 		s.ChannelMessageSend(m.ChannelID, "Swing and a miss.")
 		return
 	}
 	if m.Author.Username == user.Username {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v slaps themself in confusion.", m.Author.Username))
+		s.ChannelMessageSend(channel, fmt.Sprintf("%v slaps themself in confusion.", author))
 
 	} else {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v slaps %v around a bit with a large trout.", m.Author.Username, user.Username))
+		s.ChannelMessageSend(channel, fmt.Sprintf("%v slaps %v around a bit with a large trout.", author, user.Username))
 	}
-
 }
 
 func startVote(s *discordgo.Session, m *discordgo.MessageCreate, message string) *discordgo.Message {
