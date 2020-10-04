@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
+	"math/rand"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -128,7 +128,7 @@ func handleCommand(s *discordgo.Session, m *discordgo.MessageCreate, command str
 	case "vote":
 		vote(s, m, commands[1:])
 	case "slap":
-		slap(s, m, commands[1:])
+		go slap(s, m, commands[1:])
 	case "help":
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Votes last %v long.\nThe required number of votes is %v.", defaultVoteTime, threshold))
 	}
@@ -146,9 +146,43 @@ func vote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
 		go pollVote(s, m, commands[1:])
 	case "role":
 		go roleVote(s, m, commands[1:])
+	case "eject":
+		go eject(s, m, commands[1:])
 	default:
 		s.ChannelMessageSend(m.ChannelID, "I'm afraid I can't do that...(yet)")
 	}
+}
+
+func eject(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	if len(commands) == 0 {
+		s.ChannelMessageSend(m.ChannelID, "Vote eject command format is !vote eject user")
+		return
+	}
+	user, err := getUserFromString(s, m.GuildID, commands[0])
+	if err != nil {
+		s.ChannelMessageSend(m.ChannelID, "That user doesn't appear to exist!")
+		return
+	}
+	voteDesc := fmt.Sprintf("eject %v", user.Username)
+	botM := startVote(s, m, fmt.Sprintf("A vote has started to %v! Please react with 👍 or 👎 on this message.", voteDesc))
+	time.Sleep(defaultVoteTime)
+
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	yesVoters, _ := s.MessageReactions(botM.ChannelID, botM.ID, yesVote, 100)
+	noVoters, _ := s.MessageReactions(botM.ChannelID, botM.ID, noVote, 100)
+	//Don't count the reactions the bot adds
+	yesVotes := len(yesVoters)
+	noVotes := len(noVoters)
+	totalVotes := yesVotes + noVotes
+	eject_message := "No one was ejected."
+	if yesVotes > noVotes && totalVotes >= threshold {
+		if r.Uint32() % 5 == 0 {
+			eject_message = fmt.Sprintf("%v was An Impostor.", user.Username)
+		} else {
+			eject_message = fmt.Sprintf("%v was not An Impostor.", user.Username)
+		}
+	}
+	s.ChannelMessageSend(m.ChannelID, eject_message)
 }
 
 func slap(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
