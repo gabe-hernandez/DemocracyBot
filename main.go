@@ -338,11 +338,13 @@ func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []strin
 		s.ChannelMessageSend(m.ChannelID, "Poll command format is !vote poll description \"options\"...")
 		return
 	}
+	author := m.Author.Username
+	s.ChannelMessageDelete(m.ChannelID, m.ID)
 	re := regexp.MustCompile(`(".+?")`)
 	options := re.FindAllString(strings.Join(commands[:], " "), 10)
 	var voteDesc strings.Builder
 	pollM := options[0][1 : len(options[0])-1]
-	voteDesc.WriteString(fmt.Sprintf("A poll has started!\n**%v**", pollM))
+	voteDesc.WriteString(fmt.Sprintf("%v has started a poll!\n**%v**", author, pollM))
 	for i := 1; i < len(options); i++ {
 		voteDesc.WriteString(fmt.Sprintf("\n%v %v", emojis[i-1], options[i][1:len(options[i])-1]))
 	}
