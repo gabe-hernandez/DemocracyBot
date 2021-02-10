@@ -3,13 +3,14 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	"regexp"
 	"strings"
 	"syscall"
 	"time"
-	"math/rand"
+
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -176,7 +177,7 @@ func eject(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) 
 	totalVotes := yesVotes + noVotes
 	eject_message := "No one was ejected."
 	if yesVotes > noVotes && totalVotes >= threshold {
-		if r.Uint32() % 5 == 0 {
+		if r.Uint32()%5 == 0 {
 			eject_message = fmt.Sprintf("%v was An Impostor.", user.Username)
 		} else {
 			eject_message = fmt.Sprintf("%v was not An Impostor.", user.Username)
@@ -322,14 +323,39 @@ func roleChangeVote(s *discordgo.Session, m *discordgo.MessageCreate, commands [
 }
 
 func pollVote(s *discordgo.Session, m *discordgo.MessageCreate, commands []string) {
+	emojis := []string{
+		"1️⃣",
+		"2️⃣",
+		"3️⃣",
+		"4️⃣",
+		"5️⃣",
+		"6️⃣",
+		"7️⃣",
+		"8️⃣",
+		"9️⃣",
+	}
 	if len(commands) < 1 {
-		s.ChannelMessageSend(m.ChannelID, "Poll command format is !vote poll description")
+		s.ChannelMessageSend(m.ChannelID, "Poll command format is !vote poll description \"options\"...")
 		return
 	}
-	voteDesc := strings.Join(commands[:], " ")
-	botM := startVote(s, m, fmt.Sprintf("A poll has started for %v! Please react with 👍 or 👎 on this message.", voteDesc))
-	time.Sleep(defaultVoteTime)
-	endVote(s, botM, fmt.Sprintf(" decide on %v", voteDesc))
+	re := regexp.MustCompile(`(".+?")`)
+	options := re.FindAllString(strings.Join(commands[:], " "), 10)
+	var voteDesc strings.Builder
+	pollM := options[0][1 : len(options[0])-1]
+	voteDesc.WriteString(fmt.Sprintf("A poll has started!\n**%v**", pollM))
+	for i := 1; i < len(options); i++ {
+		voteDesc.WriteString(fmt.Sprintf("\n%v %v", emojis[i-1], options[i][1:len(options[i])-1]))
+	}
+	startPoll(s, m, voteDesc.String(), emojis[:len(options)-1])
+}
+
+func startPoll(s *discordgo.Session, m *discordgo.MessageCreate, message string, reacts []string) *discordgo.Message {
+	activeVotes[m.ID] = make(map[string]string)
+	botMessage, _ := s.ChannelMessageSend(m.ChannelID, message)
+	for i := 0; i < len(reacts); i++ {
+		s.MessageReactionAdd(botMessage.ChannelID, botMessage.ID, reacts[i])
+	}
+	return botMessage
 }
 
 func getRoleByName(s *discordgo.Session, guildID string, name string) (*discordgo.Role, error) {
